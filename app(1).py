@@ -126,16 +126,16 @@ DATA_DOCUMENTS = [
     "SERVICE: Dumpster Rental (Temporary On-site). LOCATION: New York City (NYC). PRICE ESTIMATE: $350 – $2,000+ (Rental + Haul). TYPICAL COST: $350 – $1,200.",
     "SERVICE: Dumpster Rental. LOCATION: New York City (NYC). SCOPE & NOTES: Size, permit for curb placement, and disposal tonnage affect price. TIMELINE: Rental period days–weeks.",
 
-    # === YOUR COMPANY INFO ===
-    # EDIT THESE LINES TO MATCH YOUR ACTUAL COMPANY
-    "COMPANY INFO: G5 construction PHONE: (212) 555-0199. EMAIL: Info5construction.net. . INSTAGRAM: https://www.instagram.com/g5constructioncorp/.
-    FACEBOOK:https://www.facebook.com/profile.php?id=61583799908215 " ,
-    "COMPANY INFO: G5 construction Location. ADDRESS: 350 5th Ave, New York, NY 10118.",
-    "COMPANY INFO: Business Hours. MON-FRI: 8:00 AM - 6:00 PM. SAT: 9:00 AM - 2:00 PM. SUN: Closed.",
-    "COMPANY POLICY: Warranty. We offer a 5-year workmanship warranty on all structural renovations and a 1-year warranty on cosmetic finishes.",
-    "COMPANY INFO: Licenses. We are fully licensed, bonded, and insured in New York City (License #1234567-DCA).",
-    "COMPANY INFO: Service Areas. We serve Manhattan, Brooklyn, Queens, and parts of the Bronx."
-]
+    # === COMPANY INFO ===
+    "COMPANY: G5 Construction. PHONE: (212) 555-0199. EMAIL: Info@g5construction.net.",
+    "SOCIAL MEDIA: Instagram: https://www.instagram.com/g5constructioncorp/ | Facebook: https://www.facebook.com/profile.php?id=61583799908215",
+    "COMPANY: G5 Construction Location. ADDRESS: 350 5th Ave, New York, NY 10118.",
+    "COMPANY: Business Hours. MON-FRI: 8:00 AM - 6:00 PM. SAT: 9:00 AM - 2:00 PM. SUN: Closed.",
+    "POLICY: Warranty. We offer a 5-year workmanship warranty on all structural renovations and a 1-year warranty on cosmetic finishes.",
+    "COMPANY: Licenses. We are fully licensed, bonded, and insured in New York City (License #1234567-DCA).",
+    "COMPANY: Service Areas. We serve Manhattan, Brooklyn, Queens, and parts of the Bronx."
+] 
+
 DATA_IDS = [str(i) for i in range(len(DATA_DOCUMENTS))]
 
 # --- DATABASE SETUP ---
