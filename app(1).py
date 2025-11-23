@@ -11,7 +11,6 @@ import tempfile
 import time
 import json
 import requests
-import csv
 import datetime
 from chromadb.utils import embedding_functions
 from huggingface_hub import InferenceClient, HfApi
@@ -129,14 +128,14 @@ DATA_DOCUMENTS = [
 
     # === YOUR COMPANY INFO ===
     # EDIT THESE LINES TO MATCH YOUR ACTUAL COMPANY
-    "COMPANY INFO: G5 construction. PHONE: (212) 555-0199. EMAIL: contact@buildsmartnyc.com.",
-    "COMPANY INFO: G5 construction.Location. ADDRESS: 350 5th Ave, New York, NY 10118.",
+    "COMPANY INFO: G5 construction PHONE: (212) 555-0199. EMAIL: Info5construction.net. . INSTAGRAM: https://www.instagram.com/g5constructioncorp/.
+    FACEBOOK:https://www.facebook.com/profile.php?id=61583799908215 " ,
+    "COMPANY INFO: G5 construction Location. ADDRESS: 350 5th Ave, New York, NY 10118.",
     "COMPANY INFO: Business Hours. MON-FRI: 8:00 AM - 6:00 PM. SAT: 9:00 AM - 2:00 PM. SUN: Closed.",
     "COMPANY POLICY: Warranty. We offer a 5-year workmanship warranty on all structural renovations and a 1-year warranty on cosmetic finishes.",
     "COMPANY INFO: Licenses. We are fully licensed, bonded, and insured in New York City (License #1234567-DCA).",
     "COMPANY INFO: Service Areas. We serve Manhattan, Brooklyn, Queens, and parts of the Bronx."
 ]
-
 DATA_IDS = [str(i) for i in range(len(DATA_DOCUMENTS))]
 
 # --- DATABASE SETUP ---
@@ -149,9 +148,7 @@ def get_collection():
     collection = client.get_or_create_collection(name="construction_knowledge", embedding_function=ef)
     
     if collection.count() == 0:
-        print("⚠️ DB Empty. Building now...")
         collection.add(documents=DATA_DOCUMENTS, ids=DATA_IDS)
-        print("✅ DB Built successfully.")
         
     return collection
 
@@ -189,28 +186,28 @@ def get_ai_response(prompt, context_data):
     except Exception as e:
         return f"Error: {e}"
 
-# --- DUAL LOGGING FUNCTION ---
-# --- LOGGING FUNCTION ---
+# --- LOGGING FUNCTION (The Fix) ---
 def log_to_dataset(question, answer):
+    """
+    Saves the data to your Hugging Face Dataset.
+    """
     try:
         token = st.secrets["HF_TOKEN"]
         api = HfApi(token=token)
         
-        # Prepare the data row
         data = {
             "timestamp": time.time(),
             "instruction": question,
             "output": answer
         }
         
-        # Create a unique filename based on time
         filename = f"logs/{int(time.time())}.json"
         
-        # --- IMPORTANT: CHANGE THIS LINE ---
-        # Replace 'YourUsername' with your ACTUAL Hugging Face username
+        # =========================================================
+        # 👇👇👇 CHANGE THIS LINE TO YOUR USERNAME 👇👇👇
         # Example: repo_id = "jamal670/construction-bot-logs"
-        repo_id = "IbrahimJamal2005/construction-bot-logs" 
-        # -----------------------------------
+        repo_id = "YourUsername/construction-bot-logs" 
+        # =========================================================
         
         api.upload_file(
             path_or_fileobj=json.dumps(data).encode("utf-8"),
@@ -218,46 +215,15 @@ def log_to_dataset(question, answer):
             repo_id=repo_id,
             repo_type="dataset"
         )
-        print("✅ Logged to Hugging Face")
+        print("✅ Data saved to Hugging Face Dataset")
     except Exception as e:
-        print(f"⚠️ Cloud Log Error: {e}")
-    # 2. Save to Hugging Face Dataset (Cloud)
-    try:
-        token = st.secrets.get("HF_TOKEN")
-        if token:
-            api = HfApi(token=token)
-            data = {"timestamp": timestamp, "question": question, "answer": answer}
-            
-            # Change username below if needed
-            repo_id = "IbrahimJamal2005/construction-bot-logs"
-            
-            api.upload_file(
-                path_or_fileobj=json.dumps(data).encode("utf-8"),
-                path_in_repo=f"logs/{int(time.time())}.json",
-                repo_id=repo_id,
-                repo_type="dataset"
-            )
-            print("✅ Saved to Hugging Face Cloud")
-    except Exception as e:
-        print(f"⚠️ Cloud Save Error: {e}")
+        print(f"⚠️ Could not save log: {e}")
 
 # --- NOTIFICATIONS ---
 def send_discord(name, phone, email, details):
     url = st.secrets.get("DISCORD_WEBHOOK_URL")
     if not url: return
-
-    data = {
-        "embeds": [{
-            "title": "🚀 New Construction Lead!",
-            "color": 3066993,
-            "fields": [
-                {"name": "Name", "value": name, "inline": True},
-                {"name": "Phone", "value": phone, "inline": True},
-                {"name": "Email", "value": email, "inline": False},
-                {"name": "Project", "value": details, "inline": False}
-            ]
-        }]
-    }
+    data = {"content": f"🚀 **Lead:** {name} | {phone}\n{email}\n{details}"}
     try: requests.post(url, json=data)
     except: pass
 
@@ -273,24 +239,18 @@ if not st.session_state.is_registered:
     with col2:
         st.image("https://cdn-icons-png.flaticon.com/512/2593/2593491.png", width=150)
         st.title("🏗️ Welcome")
-        st.markdown("Please sign in to consult with our AI Estimator.")
-        
         with st.form("reg_form"):
-            name = st.text_input("Full Name")
-            phone = st.text_input("Phone Number")
-            email = st.text_input("Email Address")
-            project_desc = st.text_area("Brief Project Description")
-            
-            submitted = st.form_submit_button("Start Chatting")
-            
-            if submitted:
+            name = st.text_input("Name")
+            phone = st.text_input("Phone")
+            email = st.text_input("Email")
+            desc = st.text_area("Project")
+            if st.form_submit_button("Start Chatting"):
                 if name and phone:
-                    st.success("Registered!")
-                    send_discord(name, phone, email, project_desc)
+                    send_discord(name, phone, email, desc)
                     st.session_state.is_registered = True
                     st.rerun()
                 else:
-                    st.error("Please enter at least your Name and Phone.")
+                    st.error("Name and Phone required.")
 
 # === PART B: CHAT ===
 else:
@@ -303,12 +263,10 @@ else:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.write(prompt)
         
-        # Retrieve & Generate
         context = ""
         results = collection.query(query_texts=[prompt], n_results=3)
         if results['documents']: context = "\n".join(results['documents'][0])
         
-        # Debug Box
         with st.expander("🔍 Debug: Database Context"):
             st.info(context if context else "No data found.")
 
@@ -319,5 +277,5 @@ else:
                 
         st.session_state.messages.append({"role": "assistant", "content": resp})
         
-        # LOG DATA (Cloud + Local)
-        log_data(prompt, resp)
+        # CALL THE LOGGING FUNCTION
+        log_to_dataset(prompt, resp)
