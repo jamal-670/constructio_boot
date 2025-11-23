@@ -189,21 +189,36 @@ def get_ai_response(prompt, context_data):
         return f"Error: {e}"
 
 # --- LOGGING ---
+# Replace your existing log_to_dataset function with this:
+
 def log_to_dataset(question, answer):
     try:
         token = st.secrets["HF_TOKEN"]
         api = HfApi(token=token)
-        data = {"timestamp": time.time(), "question": question, "answer": answer}
-        repo_id = "Ibrahimkhan2005/construction-bot-logs" # Change if needed
+        
+        data = {
+            "timestamp": time.time(),
+            "instruction": question,
+            "output": answer
+        }
+        
+        filename = f"logs/{int(time.time())}.json"
+        
+        # MAKE SURE THIS IS CORRECT!
+        repo_id = "Ibrahimkhan2005/construction-bot-logs" 
+        
         api.upload_file(
             path_or_fileobj=json.dumps(data).encode("utf-8"),
-            path_in_repo=f"logs/{int(time.time())}.json",
+            path_in_repo=filename,
             repo_id=repo_id,
             repo_type="dataset"
         )
+        print("✅ Logged to Hugging Face")
+        
     except Exception as e:
+        # This will show the error on your website so you can see it
+        st.error(f"⚠️ Data Save Failed: {e}")
         print(f"Log Error: {e}")
-
 # --- NOTIFICATIONS ---
 def send_discord(name, phone, email, details):
     url = st.secrets.get("DISCORD_WEBHOOK_URL")
