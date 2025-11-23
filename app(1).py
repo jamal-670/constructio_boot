@@ -1,8 +1,3 @@
-# --- 1. SQLITE FIX (MUST BE AT THE VERY TOP) ---
-import sys
-__import__('pysqlite3')
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-# -----------------------------------------------
 
 import streamlit as st
 import os
