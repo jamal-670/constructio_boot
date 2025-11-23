@@ -190,21 +190,37 @@ def get_ai_response(prompt, context_data):
         return f"Error: {e}"
 
 # --- DUAL LOGGING FUNCTION ---
-def log_data(question, answer):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # 1. Save to Local File (Docker/Streamlit Container)
+# --- LOGGING FUNCTION ---
+def log_to_dataset(question, answer):
     try:
-        file_exists = os.path.isfile('chat_logs.csv')
-        with open('chat_logs.csv', 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow(['Timestamp', 'Question', 'Answer']) # Header
-            writer.writerow([timestamp, question, answer])
-        print("✅ Saved to local CSV")
+        token = st.secrets["HF_TOKEN"]
+        api = HfApi(token=token)
+        
+        # Prepare the data row
+        data = {
+            "timestamp": time.time(),
+            "instruction": question,
+            "output": answer
+        }
+        
+        # Create a unique filename based on time
+        filename = f"logs/{int(time.time())}.json"
+        
+        # --- IMPORTANT: CHANGE THIS LINE ---
+        # Replace 'YourUsername' with your ACTUAL Hugging Face username
+        # Example: repo_id = "jamal670/construction-bot-logs"
+        repo_id = "IbrahimJamal2005/construction-bot-logs" 
+        # -----------------------------------
+        
+        api.upload_file(
+            path_or_fileobj=json.dumps(data).encode("utf-8"),
+            path_in_repo=filename,
+            repo_id=repo_id,
+            repo_type="dataset"
+        )
+        print("✅ Logged to Hugging Face")
     except Exception as e:
-        print(f"⚠️ Local Save Error: {e}")
-
+        print(f"⚠️ Cloud Log Error: {e}")
     # 2. Save to Hugging Face Dataset (Cloud)
     try:
         token = st.secrets.get("HF_TOKEN")
@@ -213,7 +229,7 @@ def log_data(question, answer):
             data = {"timestamp": timestamp, "question": question, "answer": answer}
             
             # Change username below if needed
-            repo_id = "Ibrahimkhan2005/construction-bot-logs"
+            repo_id = "IbrahimJamal2005/construction-bot-logs"
             
             api.upload_file(
                 path_or_fileobj=json.dumps(data).encode("utf-8"),
