@@ -205,7 +205,7 @@ def log_to_dataset(question, answer):
         filename = f"logs/{int(time.time())}.json"
         
         # MAKE SURE THIS IS CORRECT!
-        repo_id = "Ibrahimkhan2005/construction-bot-logs" 
+        repo_id = "IbrahimJamal2005/construction-bot-logs" 
         
         api.upload_file(
             path_or_fileobj=json.dumps(data).encode("utf-8"),
