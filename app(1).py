@@ -15,6 +15,9 @@ import datetime
 from chromadb.utils import embedding_functions
 from huggingface_hub import InferenceClient, HfApi
 
+# --- PROOF THAT NEW CODE IS RUNNING ---
+print("✅ NEW CODE LOADED: CONNECTING TO HUGGING FACE (NOT NOVITA)")
+
 # --- CONFIGURATION ---
 st.set_page_config(page_title="G5 Construction Bot", page_icon="🏗️")
 
@@ -125,8 +128,7 @@ DATA_DOCUMENTS = [
     "SERVICE: Full Truckload Junk Removal. LOCATION: New York City (NYC). SCOPE & NOTES: Full-house cleanouts or renovation debris; disposal fees included.",
     "SERVICE: Dumpster Rental (Temporary On-site). LOCATION: New York City (NYC). PRICE ESTIMATE: $350 – $2,000+ (Rental + Haul). TYPICAL COST: $350 – $1,200.",
     "SERVICE: Dumpster Rental. LOCATION: New York City (NYC). SCOPE & NOTES: Size, permit for curb placement, and disposal tonnage affect price. TIMELINE: Rental period days–weeks.",
-    
-    # === COMPANY INFO (FIXED - ALL ON ONE LINE) ===
+
     "COMPANY: G5 Construction. PHONE: (212) 555-0199. EMAIL: Info@g5construction.net.",
     "SOCIAL MEDIA: Instagram: https://www.instagram.com/g5constructioncorp/ | Facebook: https://www.facebook.com/profile.php?id=61583799908215",
     "COMPANY: G5 Construction Location. ADDRESS: 350 5th Ave, New York, NY 10118.",
@@ -135,6 +137,8 @@ DATA_DOCUMENTS = [
     "COMPANY: Licenses. We are fully licensed, bonded, and insured in New York City (License #1234567-DCA).",
     "COMPANY: Service Areas. We serve Manhattan, Brooklyn, Queens, and parts of the Bronx."
 ]
+
+
 DATA_IDS = [str(i) for i in range(len(DATA_DOCUMENTS))]
 
 # --- DATABASE SETUP ---
@@ -146,7 +150,6 @@ def get_collection():
     ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
     collection = client.get_or_create_collection(name="construction_knowledge", embedding_function=ef)
     
-    # SELF-HEALING: If empty, fill it with data!
     if collection.count() == 0:
         collection.add(documents=DATA_DOCUMENTS, ids=DATA_IDS)
         
@@ -156,7 +159,10 @@ collection = get_collection()
 
 # --- API LOGIC ---
 def get_ai_response(prompt, context_data):
+    # This uses the HF_TOKEN you saved in Secrets
     token = st.secrets["HF_TOKEN"]
+    
+    # IMPORTANT: We use the default Hugging Face URL. NO NOVITA URL HERE.
     client = InferenceClient(token=token)
     
     system_message = (
@@ -172,6 +178,7 @@ def get_ai_response(prompt, context_data):
     full_prompt = f"Context Data:\n{context_data}\n\nUser Question: {prompt}"
     
     try:
+        # Using Llama-3-8B-Instruct from Hugging Face
         messages = [
             {"role": "system", "content": system_message},
             {"role": "user", "content": full_prompt}
@@ -186,28 +193,16 @@ def get_ai_response(prompt, context_data):
     except Exception as e:
         return f"Error: {e}"
 
-# --- LOGGING FUNCTION ---
+# --- LOGGING ---
 def log_to_dataset(question, answer):
     try:
         token = st.secrets["HF_TOKEN"]
         api = HfApi(token=token)
-        
-        data = {
-            "timestamp": time.time(),
-            "instruction": question,
-            "output": answer
-        }
-        
-        filename = f"logs/{int(time.time())}.json"
-        
-        # =========================================================
-        # 👇👇👇 CHANGE THIS TO YOUR HUGGING FACE USERNAME 👇👇👇
-        repo_id = "IbrahimJamal2005/construction-bot-logs" 
-        # =========================================================
-        
+        data = {"timestamp": time.time(), "question": question, "answer": answer}
+        repo_id = "Ibrahimkhan2005/construction-bot-logs" # Change if needed
         api.upload_file(
             path_or_fileobj=json.dumps(data).encode("utf-8"),
-            path_in_repo=filename,
+            path_in_repo=f"logs/{int(time.time())}.json",
             repo_id=repo_id,
             repo_type="dataset"
         )
@@ -222,13 +217,12 @@ def send_discord(name, phone, email, details):
     try: requests.post(url, json=data)
     except: pass
 
-# --- UI LOGIC ---
+# --- UI ---
 if "is_registered" not in st.session_state:
     st.session_state.is_registered = False
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Hello! I am the G5 Construction Estimator. How can I help you?"}]
 
-# === PART A: REGISTRATION ===
 if not st.session_state.is_registered:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -246,11 +240,8 @@ if not st.session_state.is_registered:
                     st.rerun()
                 else:
                     st.error("Name and Phone required.")
-
-# === PART B: CHAT ===
 else:
     st.title("🏗️ G5 Construction Estimator")
-
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.write(msg["content"])
 
