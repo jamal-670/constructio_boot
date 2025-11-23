@@ -3,4 +3,3 @@ chromadb
 sentence-transformers
 huggingface_hub
 requests
-pysqlite3-binary
