@@ -1,190 +1,126 @@
-# --- 1. SQLITE FIX (MUST BE AT THE VERY TOP) ---
-# This fixes the "Read-only database" crash on Hugging Face
 import sys
 __import__('pysqlite3')
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-# -----------------------------------------------
 
 import streamlit as st
 import os
 import requests
 import chromadb
 import tempfile
+import json
+import time
 from chromadb.utils import embedding_functions
-from huggingface_hub import InferenceClient
+from huggingface_hub import InferenceClient, HfApi
 
-# --- Configuration & Styling ---
-st.set_page_config(
-    page_title="NYC Construction Assistant",
-    page_icon="🏗️",
-    layout="wide"
-)
+st.set_page_config(page_title="NYC Construction Bot", page_icon="🏗️")
 
-st.markdown("""
-    <style>
-    .stButton>button {
-        width: 100%;
-        border-radius: 10px;
-        height: 3em;
-    }
-    .chat-message {
-        padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; display: flex
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 2. Database Loading (Smart Path) ---
-
-try:
-    with open("test_permissions.txt", "w") as f:
-        f.write("test")
-    os.remove("test_permissions.txt")
-    CHROMA_DB_PATH = os.path.abspath("./chroma_db_data")
-except Exception:
-    CHROMA_DB_PATH = os.path.join(tempfile.gettempdir(), "chroma_db_data")
-
-COLLECTION_NAME = "construction_knowledge"
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-
-# Build DB if missing
+# --- DATABASE SETUP ---
+CHROMA_DB_PATH = os.path.join(tempfile.gettempdir(), "chroma_db_data")
 if not os.path.exists(CHROMA_DB_PATH):
-    if os.path.exists("build_db.py"):
-        import build_db
-        with st.spinner("Building database..."):
-            build_db.build_database()
+    import build_db
+    build_db.build_database()
 
 @st.cache_resource
 def load_db():
+    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+    ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+    return client.get_collection(name="construction_knowledge", embedding_function=ef)
+
+collection = load_db()
+
+# --- LOGGING TO HUGGING FACE DATASET ---
+def log_to_dataset(question, answer):
+    """
+    Saves the Q&A pair to your Hugging Face Dataset for future training.
+    """
     try:
-        client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        query_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL_NAME)
-        collection = client.get_collection(name=COLLECTION_NAME, embedding_function=query_ef)
-        return collection
-    except Exception as e:
-        print(f"❌ ChromaDB Error: {e}")
-        return None
-
-with st.spinner("🏗️ Connecting to Construction Data..."):
-    collection = load_db()
-
-# --- 3. API Model Logic (Hugging Face Official) ---
-
-def query_huggingface_api(prompt):
-    # Get Token
-    token = os.environ.get("HF_TOKEN")
-    if not token:
-        return "⚠️ Error: HF_TOKEN is missing in Settings -> Secrets."
-
-    # Setup Client (Defaults to Hugging Face URL)
-    client = InferenceClient(token=token)
-
-    try:
-        messages = [
-            {"role": "system", "content": "You are a professional NYC construction estimator. Answer strictly based on the Context provided. Use bullet points for prices."},
-            {"role": "user", "content": prompt}
-        ]
+        # Get Token from Secrets
+        token = st.secrets["HF_TOKEN"]
+        api = HfApi(token=token)
         
-        # Using Llama-3-8B-Instruct
+        # Prepare Data (JSON format is best for training)
+        data = {
+            "timestamp": time.time(),
+            "instruction": question,
+            "output": answer
+        }
+        
+        # Create a unique filename so we don't overwrite old logs
+        filename = f"logs/{int(time.time())}.json"
+        
+        # Upload to your dataset
+        # CHANGE 'Ibrahimkhan2005' TO YOUR USERNAME IF DIFFERENT
+        repo_id = "Ibrahimkhan2005/construction-bot-logs" 
+        
+        api.upload_file(
+            path_or_fileobj=json.dumps(data).encode("utf-8"),
+            path_in_repo=filename,
+            repo_id=repo_id,
+            repo_type="dataset"
+        )
+        print("✅ Data saved to Hugging Face Dataset")
+    except Exception as e:
+        print(f"⚠️ Could not save log: {e}")
+
+# --- API LOGIC ---
+def get_ai_response(prompt):
+    token = st.secrets["HF_TOKEN"] 
+    client = InferenceClient(token=token)
+    try:
+        messages = [{"role": "user", "content": prompt}]
         response = client.chat_completion(
             model="meta-llama/Meta-Llama-3-8B-Instruct",
             messages=messages, 
-            max_tokens=500, 
-            temperature=0.3
+            max_tokens=500
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"Error contacting AI Brain: {e}"
+        return f"Error: {e}"
 
-# --- 4. Notification Logic ---
+# --- NOTIFICATIONS ---
+def send_discord(name, phone, details):
+    url = st.secrets["DISCORD_WEBHOOK_URL"]
+    data = {"content": f"🚀 **Lead:** {name} | {phone}\n{details}"}
+    requests.post(url, json=data)
 
-def send_discord_notification(client_name, client_phone, client_email, details):
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    if not webhook_url: return False
+# --- UI ---
+st.title("🏗️ NYC Construction Estimator")
 
-    data = {
-        "embeds": [{
-            "title": "🚀 New Construction Lead!",
-            "color": 3066993,
-            "fields": [
-                {"name": "👤 Name", "value": client_name, "inline": True},
-                {"name": "📞 Phone", "value": client_phone, "inline": True},
-                {"name": "📧 Email", "value": client_email, "inline": False},
-                {"name": "📝 Project", "value": details, "inline": False}
-            ],
-            "footer": {"text": "Sent from G5 Construction Bot"}
-        }]
-    }
-    try:
-        requests.post(webhook_url, json=data)
-        return True
-    except:
-        return False
+if "registered" not in st.session_state: st.session_state.registered = False
+if "messages" not in st.session_state: st.session_state.messages = [{"role": "assistant", "content": "Hello! Register to start."}]
 
-# --- 5. RAG Logic ---
-
-def generate_rag_response(query):
-    retrieved_context = "No specific data found."
-    if collection:
-        try:
-            results = collection.query(query_texts=[query], n_results=3)
-            if results['documents']:
-                retrieved_context = "\n".join(results['documents'][0])
-        except:
-            pass
-
-    full_prompt = f"""
-    Context Data from Database:
-    {retrieved_context}
-    
-    User Question: {query}
-    
-    Please provide a professional estimate based on the Context Data above.
-    """
-    return query_huggingface_api(full_prompt)
-
-# --- 6. UI Logic ---
-
-if "is_registered" not in st.session_state:
-    st.session_state.is_registered = False
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! Please fill out your details to start chatting."}]
-
-if not st.session_state.is_registered:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image("https://cdn-icons-png.flaticon.com/512/2593/2593491.png", width=150)
-        st.title("🏗️ Welcome")
-        st.markdown("Please sign in to consult with our AI Estimator.")
-        
-        with st.form("reg_form"):
-            name = st.text_input("Full Name")
-            phone = st.text_input("Phone Number")
-            email = st.text_input("Email Address")
-            project_desc = st.text_area("Brief Project Description")
-            submitted = st.form_submit_button("Start Chatting")
-            
-            if submitted:
-                if name and phone:
-                    st.success("Registered!")
-                    send_discord_notification(name, phone, email, project_desc)
-                    st.session_state.is_registered = True
-                    st.session_state.messages = [{"role": "assistant", "content": f"Hi {name}! How can I help you with your construction project today?"}]
-                    st.rerun()
-                else:
-                    st.error("Please enter at least your Name and Phone.")
+if not st.session_state.registered:
+    with st.form("reg"):
+        name = st.text_input("Name")
+        phone = st.text_input("Phone")
+        desc = st.text_area("Project")
+        if st.form_submit_button("Start"):
+            if name and phone:
+                send_discord(name, phone, desc)
+                st.session_state.registered = True
+                st.rerun()
 else:
-    st.title("🏗️ Construction Assistant")
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-
-    if user_input := st.chat_input("Ask about pricing, materials, or codes..."):
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.write(user_input)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response_text = generate_rag_response(user_input)
-                st.write(response_text)
-        st.session_state.messages.append({"role": "assistant", "content": response_text})
+        with st.chat_message(msg["role"]): st.write(msg["content"])
+    
+    if prompt := st.chat_input():
+        # 1. Show User Message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.write(prompt)
+        
+        # 2. RAG Logic
+        context = ""
+        results = collection.query(query_texts=[prompt], n_results=3)
+        if results['documents']: context = "\n".join(results['documents'][0])
+        
+        final_prompt = f"Context:\n{context}\n\nQuestion: {prompt}\n\nAnswer as expert:"
+        
+        # 3. Get AI Response
+        resp = get_ai_response(final_prompt)
+        
+        # 4. Show AI Response
+        with st.chat_message("assistant"): st.write(resp)
+        st.session_state.messages.append({"role": "assistant", "content": resp})
+        
+        # 5. SAVE DATA FOR TRAINING (The New Part)
+        log_to_dataset(prompt, resp)
